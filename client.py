@@ -5,7 +5,7 @@ import os
 import shutil
 from typing import Dict, List, Optional, Any
 
-from anthropic import AsyncAnthropic
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
@@ -19,7 +19,7 @@ class Configuration:
     def __init__(self) -> None:
         """Initialize configuration with environment variables."""
         self.load_env()
-        self.api_key = os.getenv("ANTHROPIC_API_KEY")
+        self.api_key = os.getenv("OPENAI_API_KEY")
 
     @staticmethod
     def load_env() -> None:
@@ -54,7 +54,7 @@ class Configuration:
             ValueError: If the API key is not found in environment variables.
         """
         if not self.api_key:
-            raise ValueError("LLM_API_KEY not found in environment variables")
+            raise ValueError("OPENAI_API_KEY not found in environment variables")
         return self.api_key
 
 
@@ -244,120 +244,98 @@ Arguments:
 
 
 class LLMClient:
-    """Manages communication with the LLM provider (Anthropic)."""
+    """Manages communication with the LLM provider (OpenAI)."""
 
     def __init__(self, api_key: str) -> None:
-        self.api_key: str = api_key
-        self.client = AsyncAnthropic(api_key=api_key)
+        """Initialize the LLM client with API key."""
+        self.client = AsyncOpenAI(api_key=api_key)
 
     async def get_response(self, messages: List[Dict[str, str]]) -> str:
         """Get a response from the LLM.
         
         Args:
-            messages: A list of message dictionaries.
+            messages: List of message objects with role and content.
             
         Returns:
             The LLM's response as a string.
-            
-        Raises:
-            Exception: If the request to the LLM fails.
         """
         try:
-            anthropic_messages = []
-            for msg in messages:
-                role = msg["role"]
-                content = msg["content"]
-                
-                if role == "system":
-                    system_message = content
-                    continue
-                elif role == "user":
-                    anthropic_role = "user"
-                elif role == "assistant":
-                    anthropic_role = "assistant"
-                else:
-                    # Skip unknown roles
-                    continue
-                
-                anthropic_messages.append({"role": anthropic_role, "content": content})
+            openai_messages = []
             
-            # Create a non-streaming message
-            response = await self.client.messages.create(
-                max_tokens=4096,
-                messages=anthropic_messages,
-                model="claude-3-5-sonnet-latest",
-                system=system_message if 'system_message' in locals() else None,
+            # Convert messages to OpenAI format
+            for message in messages:
+                role = message.get("role", "").lower()
+                content = message.get("content", "")
+                
+                # Map to OpenAI roles
+                openai_role = "user"
+                if role == "assistant":
+                    openai_role = "assistant"
+                
+                openai_messages.append({"role": openai_role, "content": content})
+            
+            response = await self.client.chat.completions.create(
+                messages=openai_messages,
+                model="gpt-4-turbo",
+                temperature=0.2,
+                max_tokens=4096
             )
             
-            return response.content[0].text
-            
+            return response.choices[0].message.content.strip()
         except Exception as e:
-            error_message = f"Error getting LLM response: {str(e)}"
-            logging.error(error_message)
-            return f"I encountered an error: {error_message}. Please try again or rephrase your request."
-    
+            logging.error(f"Error getting LLM response: {e}")
+            return f"Error: {str(e)}"
+
     async def get_streaming_response(self, messages: List[Dict[str, str]], print_stream: bool = True) -> str:
         """Get a streaming response from the LLM.
         
         Args:
-            messages: A list of message dictionaries.
-            print_stream: Whether to print the response as it streams in.
+            messages: List of message objects with role and content.
+            print_stream: Whether to print the streaming response.
             
         Returns:
-            The LLM's response as a string.
-            
-        Raises:
-            Exception: If the request to the LLM fails.
+            The complete LLM response as a string.
         """
         try:
-            anthropic_messages = []
-            system_message = None
+            openai_messages = []
             
-            for msg in messages:
-                role = msg["role"]
-                content = msg["content"]
+            # Convert messages to OpenAI format
+            for message in messages:
+                role = message.get("role", "").lower()
+                content = message.get("content", "")
                 
-                if role == "system":
-                    system_message = content
-                    continue
-                elif role == "user":
-                    anthropic_role = "user"
-                elif role == "assistant":
-                    anthropic_role = "assistant"
-                else:
-                    continue
+                # Map to OpenAI roles
+                openai_role = "user"
+                if role == "assistant":
+                    openai_role = "assistant"
                 
-                anthropic_messages.append({"role": anthropic_role, "content": content})
+                openai_messages.append({"role": openai_role, "content": content})
             
-            stream = await self.client.messages.create(
+            # Create the completion with streaming
+            response_stream = await self.client.chat.completions.create(
+                messages=openai_messages,
+                model="gpt-4-turbo",
+                temperature=0.2,
                 max_tokens=4096,
-                messages=anthropic_messages,
-                model="claude-3-5-sonnet-latest",
-                system=system_message,
-                stream=True,
+                stream=True
             )
             
-            if print_stream:
-                print("\nAssistant: ", end="", flush=True)
-                
-            # Collect the response
-            full_response = ""
-            async for event in stream:
-                if event.type == "content_block_delta":
-                    full_response += event.delta.text
-                    # Print progress if requested
+            # Process the stream
+            collected_messages = []
+            async for chunk in response_stream:
+                content = chunk.choices[0].delta.content
+                if content:
+                    collected_messages.append(content)
                     if print_stream:
-                        print(event.delta.text, end="", flush=True)
+                        print(content, end="", flush=True)
             
             if print_stream:
-                print()
+                print()  # Add a newline at the end
                 
-            return full_response
-            
+            return "".join(collected_messages)
         except Exception as e:
-            error_message = f"Error getting streaming LLM response: {str(e)}"
-            logging.error(error_message)
-            return f"I encountered an error: {error_message}. Please try again or rephrase your request."
+            logging.error(f"Error getting streaming LLM response: {e}")
+            return f"Error: {str(e)}"
 
 
 class ChatSession:

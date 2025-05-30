@@ -10,7 +10,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from pydantic_ai import Agent, RunContext, Tool
-from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.tools import ToolDefinition
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -172,14 +172,14 @@ class PydanticMCPClient:
         
         return pydantic_tools
     
-    async def create_agent(self, model_name: str = 'claude-3-5-sonnet-latest') -> Agent:
+    async def create_agent(self, model_name: str = 'gpt-4-turbo') -> Agent:
         """Create a Pydantic agent with tools from all servers."""
         if not self.servers:
             raise RuntimeError("No servers initialized. Call initialize_servers() first.")
             
         pydantic_tools = await self.load_all_tools()
         
-        model = AnthropicModel(model_name)
+        model = OpenAIModel(model_name)
         self.agent = Agent(model, deps_type=str, tools=pydantic_tools)
         
         # Debug: Check what tools are actually registered

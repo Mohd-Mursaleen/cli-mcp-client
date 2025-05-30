@@ -1,12 +1,15 @@
 {
   "mcpServers": {
-    "git": {
-      "command": "uvx",
-      "args": ["mcp-server-git", "--repository", "."]
-    },
-    "puppeteer": {
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+    "poke": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "mcp[cli]",
+        "mcp",
+        "run",
+        "/Users/mohdmursaleen/ Personal Projects/Pokemon-MCP-Server/poke.py"
+      ]
     }
   }
 }

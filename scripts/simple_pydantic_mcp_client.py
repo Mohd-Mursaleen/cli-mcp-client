@@ -11,7 +11,7 @@ from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
 from pydantic_ai import Agent, RunContext, Tool
-from pydantic_ai.models.anthropic import AnthropicModel
+from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.tools import ToolDefinition
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -78,7 +78,7 @@ async def main():
                 pydantic_tools.append(mcp_tool)
                 tool_dict[tool.name]  = {'description' : tool.description, 'schema' : tool.inputSchema}
 
-    model = AnthropicModel('claude-3-5-sonnet-latest')
+    model = OpenAIModel('gpt-4-turbo')
     agent = Agent(model, 
                   deps_type=str,
                   tools=pydantic_tools)
